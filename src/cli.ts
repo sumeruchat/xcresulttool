@@ -309,16 +309,43 @@ async function main() {
           if (targets.length > 0) {
             coverageSummary += "## Target Coverage Details\n\n";
             
-            for (const target of targets) {
-              const targetName = target.trim();
+            // Check if --only-target is supported
+            let onlyTargetSupported = true;
+            try {
+              // Test with a simple command
+              child_process.execSync('xcrun xccov view --help', { encoding: 'utf8' });
+            } catch (helpError) {
+              // If help shows the flag isn't supported, we'll use a different approach
+              onlyTargetSupported = false;
+              if (debug) console.log("--only-target flag not supported, using alternative approach");
+            }
+            
+            for (const targetLine of targets) {
+              // Parse the target name from the line
+              // Format is typically: "ID Name                            # Source Files Coverage"
+              const targetMatch = targetLine.match(/^[0-9A-F]+ (.+?)\s+\d+\s+\d+\.\d+%$/);
+              if (!targetMatch) continue;
+              
+              const targetName = targetMatch[1].trim();
               if (!targetName) continue;
               
-              const targetCommand = `xcrun xccov view --report --only-target "${targetName}" "${bundlePath}"`;
-              if (debug) console.log(`Running: ${targetCommand}`);
-              
-              const targetOutput = child_process.execSync(targetCommand, { encoding: 'utf8' });
               coverageSummary += `### ${targetName}\n\n`;
-              coverageSummary += "```\n" + targetOutput + "```\n\n";
+              
+              if (onlyTargetSupported) {
+                try {
+                  const targetCommand = `xcrun xccov view --report --only-target "${targetName}" "${bundlePath}"`;
+                  if (debug) console.log(`Running: ${targetCommand}`);
+                  
+                  const targetOutput = child_process.execSync(targetCommand, { encoding: 'utf8' });
+                  coverageSummary += "```\n" + targetOutput + "```\n\n";
+                } catch (targetError) {
+                  // If this specific target command fails, just show the error and continue
+                  coverageSummary += `Error getting details for target: ${(targetError as Error).message}\n\n`;
+                }
+              } else {
+                // Alternative approach: just show the target line from the summary
+                coverageSummary += "```\n" + targetLine + "\n```\n\n";
+              }
             }
           }
         } else {
