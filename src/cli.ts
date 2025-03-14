@@ -3,7 +3,6 @@
 import * as path from 'path'
 import * as fs from 'fs'
 import yargs from 'yargs'
-import {Formatter} from './formatter'
 import * as child_process from 'child_process'
 import * as os from 'os'
 
@@ -12,12 +11,11 @@ interface CliArgs {
   'show-passed-tests': boolean
   'show-code-coverage': boolean
   'debug': boolean
+  'github-action': boolean
   [key: string]: unknown
 }
 
 async function main() {
-  console.log("=== XCResult CLI Tool Starting ===");
-  
   try {
     const argv = await yargs
       .usage('Usage: $0 [options]')
@@ -41,6 +39,11 @@ async function main() {
         type: 'boolean',
         default: false
       })
+      .option('github-action', {
+        describe: 'Running as part of GitHub Action',
+        type: 'boolean',
+        default: false
+      })
       .help()
       .alias('help', 'h')
       .version()
@@ -49,12 +52,14 @@ async function main() {
 
     const bundlePath = argv.path;
     const debug = argv.debug;
+    const isGitHubAction = argv['github-action'];
     
     if (debug) {
       console.log("Arguments parsed successfully");
       console.log(`Path: ${bundlePath}`);
       console.log(`Show passed tests: ${argv['show-passed-tests']}`);
       console.log(`Show code coverage: ${argv['show-code-coverage']}`);
+      console.log(`Running as GitHub Action: ${isGitHubAction}`);
     }
     
     // Check if the file exists
@@ -170,11 +175,11 @@ async function main() {
           const testData = JSON.parse(testDetailsOutput);
           
           if (testData.summaries && testData.summaries.length > 0) {
-            const testSummary = testData.summaries[0];
-            testSummary += `- Total tests: ${testSummary.totals.testsCount._value}\n`;
-            testSummary += `- Failed tests: ${testSummary.totals.failedCount._value}\n`;
-            testSummary += `- Unexpected failures: ${testSummary.totals.unexpectedFailureCount._value}\n`;
-            testSummary += `- Test duration: ${testSummary.duration._value.toFixed(2)} seconds\n`;
+            const testSummaryData = testData.summaries[0];
+            testSummary += `- Total tests: ${testSummaryData.totals.testsCount._value}\n`;
+            testSummary += `- Failed tests: ${testSummaryData.totals.failedCount._value}\n`;
+            testSummary += `- Unexpected failures: ${testSummaryData.totals.unexpectedFailureCount._value}\n`;
+            testSummary += `- Test duration: ${testSummaryData.duration._value.toFixed(2)} seconds\n`;
           }
           
           // Generate test details
@@ -316,11 +321,27 @@ async function main() {
     }
     
     // Output the report
-    console.log(testSummary);
-    console.log(testDetails);
+    const fullReport = [testSummary, testDetails];
     
     if (argv['show-code-coverage']) {
-      console.log(coverageSummary);
+      fullReport.push(coverageSummary);
+    }
+    
+    // If running as GitHub Action, output in a format that can be parsed by the action
+    if (isGitHubAction) {
+      console.log(fullReport.join('\n'));
+    } else {
+      // For CLI usage, print with some formatting
+      console.log('\n' + '='.repeat(80));
+      console.log(testSummary);
+      console.log('='.repeat(80) + '\n');
+      console.log(testDetails);
+      
+      if (argv['show-code-coverage']) {
+        console.log('\n' + '='.repeat(80));
+        console.log(coverageSummary);
+        console.log('='.repeat(80) + '\n');
+      }
     }
     
   } catch (error) {
