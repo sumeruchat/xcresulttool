@@ -15,6 +15,61 @@ interface CliArgs {
   [key: string]: unknown
 }
 
+// Define interfaces for the test results
+interface TestFailure {
+  testName: string
+  targetName: string
+  failureText: string
+  testIdentifier: number
+}
+
+interface Device {
+  deviceId?: string
+  deviceName: string
+  architecture: string
+  modelName: string
+  platform?: string
+  osVersion: string
+}
+
+interface Configuration {
+  configurationId: string
+  configurationName: string
+}
+
+interface DeviceAndConfigurationSummary {
+  device: Device
+  testPlanConfiguration: Configuration
+  passedTests: number
+  failedTests: number
+  skippedTests: number
+  expectedFailures: number
+}
+
+interface TestResults {
+  title: string
+  startTime?: number
+  finishTime?: number
+  environmentDescription: string
+  result: string
+  totalTestCount: number
+  passedTests: number
+  failedTests: number
+  skippedTests: number
+  expectedFailures: number
+  devicesAndConfigurations: DeviceAndConfigurationSummary
+  testFailures: Record<string, TestFailure>
+}
+
+// Interface for legacy test data
+interface LegacyTest {
+  name?: { _value: string }
+  subtests?: LegacyTest[]
+  testStatus?: { _value: string }
+  duration?: { _value: number }
+  summaryRef?: { _value: string }
+}
+
 async function main() {
   try {
     const argv = await yargs
@@ -102,7 +157,7 @@ async function main() {
         if (debug) console.log(`Running: ${testResultsCommand}`);
         
         const testResultsOutput = child_process.execSync(testResultsCommand, { encoding: 'utf8' });
-        const testResults = JSON.parse(testResultsOutput);
+        const testResults = JSON.parse(testResultsOutput) as TestResults;
         
         // Generate test summary
         testSummary = "# Test Results Summary\n\n";
@@ -118,7 +173,8 @@ async function main() {
         
         if (testResults.testFailures && Object.keys(testResults.testFailures).length > 0) {
           testDetails += "## Failed Tests\n\n";
-          for (const failure of Object.values(testResults.testFailures)) {
+          for (const failureKey of Object.keys(testResults.testFailures)) {
+            const failure = testResults.testFailures[failureKey];
             testDetails += `### ${failure.testName} (${failure.targetName})\n`;
             testDetails += `\`\`\`\n${failure.failureText}\n\`\`\`\n\n`;
           }
@@ -186,7 +242,7 @@ async function main() {
           testDetails = "# Test Details\n\n";
           
           if (testData.tests && testData.tests.length > 0) {
-            const processTests = (tests, indent = "") => {
+            const processTests = (tests: LegacyTest[], indent = "") => {
               for (const test of tests) {
                 if (test.name) {
                   testDetails += `${indent}## ${test.name._value}\n\n`;
